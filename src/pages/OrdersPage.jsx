@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { T, FONT } from "../theme";
 import { fmt, daysAgo } from "../utils";
 import { Btn } from "../components/ui";
+import { useStore } from "../store";
 
 const S = {
     NEW: { bg: `${T.sky}18`, color: T.sky, label: "New Order", next: "Accept" },
@@ -14,25 +15,19 @@ const S = {
 
 const FLOW = ["NEW", "ACCEPTED", "PACKED", "DISPATCHED", "DELIVERED"];
 
-const INIT = [
-    { id: "#4421", customer: "Raj Garage, Andheri", phone: "9876543210", items: "Brake Pads × 2, Oil Filter × 4", total: 8980, status: "NEW", time: Date.now() - 600000, payment: "Cash", vehicle: "MH04-AB-9921" },
-    { id: "#4420", customer: "AutoFix, Worli", phone: "9812345678", items: "Exide Battery × 1", total: 5800, status: "ACCEPTED", time: Date.now() - 3600000, payment: "UPI", vehicle: null },
-    { id: "#4419", customer: "Sri Durga Motors, Dadar", phone: "9900112233", items: "Shock Absorber × 2, Belt × 3", total: 8850, status: "PACKED", time: Date.now() - 7200000, payment: "Paid", vehicle: "KA01-MX-4421" },
-    { id: "#4418", customer: "Hussain Auto, Kurla", phone: "9765432100", items: "Exide Battery × 1", total: 5800, status: "DELIVERED", time: Date.now() - 18000000, payment: "UPI", vehicle: "DL03-CD-2211" },
-    { id: "#4417", customer: "Saini Car Care, Bandra", phone: "9988776655", items: "Spark Plugs × 8", total: 1320, status: "CANCELLED", time: Date.now() - 86400000, payment: "Cash", vehicle: null },
-];
+export function OrdersPage({ products, activeShopId, onSale, toast }) {
+    const { orders, saveOrders } = useStore();
 
-export function OrdersPage({ products, onSale, toast }) {
-    const [orders, setOrders] = useState(INIT);
+    const shopOrders = useMemo(() => orders.filter(o => o.shopId === activeShopId).sort((a, b) => b.time - a.time), [orders, activeShopId]);
 
-    const advance = id => setOrders(p => p.map(o => { if (o.id !== id) return o; const i = FLOW.indexOf(o.status); return i === -1 || i === FLOW.length - 1 ? o : { ...o, status: FLOW[i + 1] }; }));
-    const reject = id => setOrders(p => p.map(o => o.id !== id ? o : { ...o, status: "CANCELLED" }));
+    const advance = id => saveOrders(orders.map(o => { if (o.id !== id) return o; const i = FLOW.indexOf(o.status); return i === -1 || i === FLOW.length - 1 ? o : { ...o, status: FLOW[i + 1] }; }));
+    const reject = id => saveOrders(orders.map(o => o.id !== id ? o : { ...o, status: "CANCELLED" }));
 
     return (
         <div className="page-in" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
                 {["NEW", "ACCEPTED", "PACKED", "DISPATCHED", "DELIVERED", "CANCELLED"].map(s => {
-                    const m = S[s]; const cnt = orders.filter(o => o.status === s).length;
+                    const m = S[s]; const cnt = shopOrders.filter(o => o.status === s).length;
                     return (
                         <div key={s} style={{ background: m.bg, border: `1px solid ${m.color}28`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
                             <div style={{ fontSize: 24, fontWeight: 900, color: m.color, fontFamily: FONT.mono }}>{cnt}</div>
@@ -41,7 +36,7 @@ export function OrdersPage({ products, onSale, toast }) {
                     );
                 })}
             </div>
-            {orders.map(o => {
+            {shopOrders.map(o => {
                 const m = S[o.status];
                 return (
                     <div key={o.id} className="card-hover" style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>

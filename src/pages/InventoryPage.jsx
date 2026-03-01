@@ -5,7 +5,7 @@ import { Badge, Btn, Input, Select } from "../components/ui";
 import { PurchaseModal } from "../components/PurchaseModal";
 import { SaleModal } from "../components/SaleModal";
 
-export function InventoryPage({ products, movements, onAdd, onEdit, onSale, onPurchase, toast }) {
+export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit, onSale, onPurchase, toast }) {
     const [search, setSearch] = useState("");
     const [cat, setCat] = useState("All");
     const [statusF, setStatusF] = useState("All");
@@ -13,8 +13,10 @@ export function InventoryPage({ products, movements, onAdd, onEdit, onSale, onPu
     const [saleP, setSaleP] = useState(null);
     const [purchP, setPurchP] = useState(null);
 
+    const shopProducts = useMemo(() => products.filter(p => p.shopId === activeShopId), [products, activeShopId]);
+
     const filtered = useMemo(() =>
-        products
+        shopProducts
             .filter(p => cat === "All" || p.category === cat)
             .filter(p => statusF === "All" || stockStatus(p) === statusF)
             .filter(p => !search || [p.name, p.sku, p.brand, p.supplier].some(s => (s || "").toLowerCase().includes(search.toLowerCase())))
@@ -25,11 +27,11 @@ export function InventoryPage({ products, movements, onAdd, onEdit, onSale, onPu
                 if (sortBy === "value") return b.buyPrice * b.stock - a.buyPrice * a.stock;
                 if (sortBy === "sell") return b.sellPrice - a.sellPrice;
                 return a.name.localeCompare(b.name);
-            }), [products, cat, statusF, search, sortBy]);
+            }), [shopProducts, cat, statusF, search, sortBy]);
 
     const counts = {
-        out: products.filter(p => p.stock <= 0).length,
-        low: products.filter(p => p.stock > 0 && p.stock < p.minStock).length,
+        out: shopProducts.filter(p => p.stock <= 0).length,
+        low: shopProducts.filter(p => p.stock > 0 && p.stock < p.minStock).length,
     };
 
     return (
@@ -53,11 +55,30 @@ export function InventoryPage({ products, movements, onAdd, onEdit, onSale, onPu
                         <button key={v} onClick={() => setStatusF(v)} style={{ background: statusF === v ? (v === "out" ? T.crimson : v === "low" ? T.amber : v === "ok" ? T.emerald : T.sky) : "transparent", color: statusF === v ? "#000" : T.t2, border: `1px solid ${statusF === v ? (v === "out" ? T.crimson : v === "low" ? T.amber : v === "ok" ? T.emerald : T.sky) : T.border}`, borderRadius: 7, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT.ui, transition: "all 0.12s" }}>{l}</button>
                     ))}
                 </div>
+                {counts.low > 0 && (
+                    <Btn
+                        variant="sky"
+                        size="sm"
+                        onClick={() => {
+                            const lowItems = shopProducts.filter(p => p.stock < p.minStock);
+                            toast && toast(`Generated Draft PO for ${lowItems.length} items sent to Distributors.`);
+                        }}
+                    >
+                        📦 Generate Draft PO ({counts.low})
+                    </Btn>
+                )}
                 <Btn onClick={onAdd} size="sm">＋ Add Product</Btn>
             </div>
 
-            <div style={{ fontSize: 12, color: T.t3, fontFamily: FONT.ui }}>
-                Showing <span style={{ color: T.t1, fontWeight: 700 }}>{filtered.length}</span> of {products.length} products
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 12, color: T.t3, fontFamily: FONT.ui }}>
+                    Showing <span style={{ color: T.t1, fontWeight: 700 }}>{filtered.length}</span> of {shopProducts.length} products
+                </div>
+                {shopProducts.filter(p => p.movements && Date.now() - p.movements[p.movements.length - 1]?.date > 180 * 24 * 60 * 60 * 1000).length > 0 && (
+                    <div style={{ background: `${T.crimson}22`, border: `1px solid ${T.crimson}55`, color: T.crimson, padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 800 }}>
+                        ⚠️ {shopProducts.filter(p => p.movements && Date.now() - p.movements[p.movements.length - 1]?.date > 180 * 24 * 60 * 60 * 1000).length} Dead Stock items identified. Suggest Flash Sale?
+                    </div>
+                )}
             </div>
 
             {/* Table */}

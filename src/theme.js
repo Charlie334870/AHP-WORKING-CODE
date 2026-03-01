@@ -1,39 +1,39 @@
 export const T = {
-  bg:        "#0D1117",
-  surface:   "#161B22",
-  card:      "#1C2333",
-  cardHover: "#1F2A3C",
-  border:    "#2A3446",
-  borderHi:  "#374458",
+  bg: "#0A0F1D",   // Deep navy background
+  surface: "#121B2F",   // Progressive slate surface
+  card: "#1A253D",   // Elevated card surface
+  cardHover: "#23314F",
+  border: "#2A3B59",
+  borderHi: "#3B5075",
   // Amber — primary brand
-  amber:     "#F59E0B",
-  amberDim:  "#92400E",
+  amber: "#F59E0B",
+  amberDim: "#92400E",
   amberGlow: "rgba(245,158,11,0.12)",
   amberSoft: "rgba(245,158,11,0.06)",
-  // Emerald — profit/success
-  emerald:   "#10B981",
-  emeraldDim:"#065F46",
+  // Emerald — profit/success (fitment/stock)
+  emerald: "#10B981",
+  emeraldDim: "#065F46",
   emeraldBg: "rgba(16,185,129,0.1)",
-  // Crimson — loss/danger
-  crimson:   "#EF4444",
-  crimsonDim:"#7F1D1D",
+  // Crimson — loss/danger (incompatible/no stock)
+  crimson: "#EF4444",
+  crimsonDim: "#7F1D1D",
   crimsonBg: "rgba(239,68,68,0.1)",
-  // Sky — info/purchase
-  sky:       "#38BDF8",
-  skyDim:    "#0C4A6E",
-  skyBg:     "rgba(56,189,248,0.1)",
+  // Sky — info/purchase (universal fit)
+  sky: "#38BDF8",
+  skyDim: "#0C4A6E",
+  skyBg: "rgba(56,189,248,0.1)",
   // Violet — accent secondary
-  violet:    "#A78BFA",
-  violetBg:  "rgba(167,139,250,0.1)",
+  violet: "#A78BFA",
+  violetBg: "rgba(167,139,250,0.1)",
   // Text hierarchy
-  t1:        "#F0F4F8",   // headings
-  t2:        "#94A3B8",   // secondary
-  t3:        "#4A5568",   // muted
-  t4:        "#2D3748",   // very muted
+  t1: "#F0F4F8",   // headings
+  t2: "#94A3B8",   // secondary
+  t3: "#64748B",   // muted
+  t4: "#334155",   // very muted
 };
 
 export const FONT = {
-  ui:   "'Outfit', system-ui, sans-serif",
+  ui: "'Outfit', system-ui, sans-serif",
   mono: "'JetBrains Mono', 'Fira Code', monospace",
 };
 

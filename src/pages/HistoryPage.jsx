@@ -9,20 +9,22 @@ const TYPE_CFG = {
     ADJUST: { bg: `rgba(167,139,250,0.1)`, color: T.violet, label: "Adjustment", sym: "±" },
 };
 
-export function HistoryPage({ movements }) {
+export function HistoryPage({ movements, activeShopId }) {
     const [filter, setFilter] = useState("ALL");
     const [search, setSearch] = useState("");
 
-    const sorted = useMemo(() => [...movements].sort((a, b) => b.date - a.date), [movements]);
+    const shopMovements = useMemo(() => movements.filter(m => m.shopId === activeShopId), [movements, activeShopId]);
+
+    const sorted = useMemo(() => [...shopMovements].sort((a, b) => b.date - a.date), [shopMovements]);
     const filtered = sorted.filter(m => filter === "ALL" || m.type === filter).filter(m => !search || [m.productName, m.invoiceNo, m.supplier, m.customerName].some(s => (s || "").toLowerCase().includes(search.toLowerCase())));
 
     const totals = useMemo(() => ({
-        purchases: movements.filter(m => m.type === "PURCHASE").reduce((s, m) => s + m.total, 0),
-        sales: movements.filter(m => m.type === "SALE").reduce((s, m) => s + m.total, 0),
-        profit: movements.filter(m => m.type === "SALE").reduce((s, m) => s + (m.profit || 0), 0),
-        count_p: movements.filter(m => m.type === "PURCHASE").length,
-        count_s: movements.filter(m => m.type === "SALE").length,
-    }), [movements]);
+        purchases: shopMovements.filter(m => m.type === "PURCHASE").reduce((s, m) => s + m.total, 0),
+        sales: shopMovements.filter(m => m.type === "SALE").reduce((s, m) => s + m.total, 0),
+        profit: shopMovements.filter(m => m.type === "SALE").reduce((s, m) => s + (m.profit || 0), 0),
+        count_p: shopMovements.filter(m => m.type === "PURCHASE").length,
+        count_s: shopMovements.filter(m => m.type === "SALE").length,
+    }), [shopMovements]);
 
     return (
         <div className="page-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>

@@ -4,7 +4,20 @@ import { fmt, fmtDateTime } from "../utils";
 import { Modal, Field, Input, Select, Divider, Btn } from "./ui";
 
 export function SaleModal({ open, onClose, product, products, onSave, toast }) {
-    const blank = { productId: product?.id || "", qty: "1", sellPrice: String(product?.sellPrice || ""), discount: "0", discountType: "%", customerName: "", customerPhone: "", vehicleReg: "", mechanic: "", payment: "Cash", notes: "" };
+    const blank = {
+        type: "Sale", // "Sale" | "Quotation"
+        productId: product?.id || "",
+        qty: "1",
+        sellPrice: String(product?.sellPrice || ""),
+        discount: "0",
+        discountType: "%",
+        customerName: "",
+        customerPhone: "",
+        vehicleReg: "",
+        mechanic: "",
+        paymentModes: { Cash: 0, UPI: 0, Card: 0, Credit: 0, Cheque: 0 },
+        notes: ""
+    };
     const [f, setF] = useState(blank);
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
@@ -32,14 +45,19 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
     const gstAmt_ = (totalAfterDisc * gstRate) / (100 + gstRate); // GST inclusive
     const profitPerUnit = sellPrice - (sel?.buyPrice || 0);
     const totalProfit = (profitPerUnit * qty) - discAmt;
-    const invoiceNo = "INV-" + Math.floor(Math.random() * 9000 + 4000);
+    const invoiceNo = (f.type === "Quotation" ? "EST-" : "INV-") + Math.floor(Math.random() * 9000 + 4000);
+
+    // Payment Splitting Logic
+    const activePayments = Object.values(f.paymentModes).reduce((a, b) => a + b, 0);
+    const autoCredit = Math.max(0, totalAfterDisc - activePayments); // Whatever is unpaid drops to credit
 
     const validate = () => {
         const e = {};
         if (!f.productId) e.productId = "Select a product";
         if (!f.qty || +f.qty <= 0) e.qty = "Enter quantity";
-        if (sel && +f.qty > sel.stock) e.qty = `Only ${sel.stock} in stock`;
+        if (f.type === "Sale" && sel && +f.qty > sel.stock) e.qty = `Only ${sel.stock} in stock`;
         if (!f.sellPrice || +f.sellPrice <= 0) e.sellPrice = "Enter price";
+        if (activePayments > totalAfterDisc + 1) e.payments = "Payment exceeds total bill";
         setErrors(e);
         return Object.keys(e).length === 0;
     };
@@ -48,7 +66,13 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
         if (!validate()) return;
         setSaving(true);
         await new Promise(r => setTimeout(r, 300));
+
+        // Finalize payment distribution
+        const finalPayments = { ...f.paymentModes };
+        if (autoCredit > 0) finalPayments.Credit += autoCredit;
+
         onSave({
+            type: f.type, // Sale or Estimate
             productId: f.productId,
             qty: +f.qty,
             sellPrice,
@@ -57,13 +81,13 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
             discountValue: +f.discount || 0,
             subtotal,
             total: totalAfterDisc,
-            gstAmount: gstAmt_,
+            gstAmount: f.type === "Sale" ? gstAmt_ : 0,
             profit: totalProfit,
             customerName: f.customerName,
             customerPhone: f.customerPhone,
             vehicleReg: f.vehicleReg,
             mechanic: f.mechanic,
-            payment: f.payment,
+            payments: finalPayments,
             notes: f.notes,
             invoiceNo,
             date: now.current,
@@ -72,7 +96,7 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
         setShowInvoice(true);
     };
 
-    const paymentModes = ["Cash", "UPI", "Card", "Credit", "Cheque"];
+    const paymentModesList = ["Cash", "UPI", "Card", "Credit", "Cheque"];
 
     if (showInvoice && sel) return (
         <Modal open={open} onClose={onClose} title="Sale Recorded ✓" width={440}>
@@ -102,9 +126,11 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 800, borderTop: `1px solid ${T.border}`, paddingTop: 10, color: T.t1 }}>
                     <span>TOTAL</span><span style={{ fontFamily: FONT.mono }}>{fmt(totalAfterDisc)}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.t3, marginTop: 6 }}>
-                    <span>Payment</span><span>{f.payment}</span>
-                </div>
+                {Object.entries({ ...f.paymentModes, Credit: f.paymentModes.Credit + autoCredit }).filter(([_, amt]) => amt > 0).map(([method, amt]) => (
+                    <div key={method} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.t3, marginTop: 4 }}>
+                        <span>Paid via {method}</span><span style={{ fontFamily: FONT.mono }}>{fmt(amt)}</span>
+                    </div>
+                ))}
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                 <Btn variant="ghost" full style={{ fontSize: 12 }}>🖨 Print</Btn>
@@ -115,7 +141,17 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
     );
 
     return (
-        <Modal open={open} onClose={onClose} title="📤 Sale Entry" subtitle="Record a product sold to customer" width={620}>
+        <Modal open={open} onClose={onClose} title={`📤 ${f.type} Entry`} subtitle={f.type === "Sale" ? "Record a product sold to customer" : "Generate a price quotation (does not deduct stock)"} width={620}>
+
+            {/* TYPE TOGGLE */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 20, background: T.surface, padding: 6, borderRadius: 10 }}>
+                {["Sale", "Quotation"].map(t => (
+                    <button key={t} onClick={() => set("type")(t)} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: f.type === t ? (t === "Sale" ? T.amber : T.sky) : "transparent", color: f.type === t ? "#000" : T.t3, fontWeight: 800, cursor: "pointer", transition: "all 0.2s" }}>
+                        {t === "Sale" ? "🧾 Tax Invoice / Cash Memo" : "📝 Estimate / Quotation"}
+                    </button>
+                ))}
+            </div>
+
             {!product && (
                 <div style={{ marginBottom: 18 }}>
                     <Field label="Product" required error={errors.productId}>
@@ -142,7 +178,7 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
             )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <Field label="Quantity" required error={errors.qty} hint={sel ? `Available: ${sel.stock} units` : ""}>
+                <Field label="Quantity" required error={errors.qty} hint={f.type === "Sale" && sel ? `Available: ${sel.stock} units` : ""}>
                     <Input type="number" value={f.qty} onChange={set("qty")} placeholder="1" suffix="units" autoFocus={!!product} />
                 </Field>
                 <Field label="Selling Price / Unit" required error={errors.sellPrice} hint={sel ? `Default: ${fmt(sel.sellPrice)}` : ""}>
@@ -175,17 +211,31 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
                     <Input value={f.mechanic} onChange={set("mechanic")} placeholder="Ramesh K" icon="🔧" />
                 </Field>
 
-                <Divider label="Payment" />
+                <Divider label="Payment Splitting (Udhaar)" />
                 <div style={{ gridColumn: "span 2" }} />
 
                 <div style={{ gridColumn: "span 2" }}>
-                    <Field label="Payment Mode">
-                        <div style={{ display: "flex", gap: 6 }}>
-                            {paymentModes.map(pm => (
-                                <button key={pm} onClick={() => set("payment")(pm)} style={{ flex: 1, background: f.payment === pm ? (pm === "Credit" ? T.crimson : T.amber) : "transparent", color: f.payment === pm ? "#000" : T.t2, border: `1px solid ${f.payment === pm ? (pm === "Credit" ? T.crimson : T.amber) : T.border}`, borderRadius: 7, padding: "8px 4px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: FONT.ui, transition: "all 0.12s", textAlign: "center" }}>
-                                    {pm === "Cash" ? "💵" : pm === "UPI" ? "📱" : pm === "Card" ? "💳" : pm === "Credit" ? "📋" : "📝"}<br />{pm}
-                                </button>
+                    <Field label="How is the customer paying today?" error={errors.payments}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 8 }}>
+                            {["Cash", "UPI", "Card"].map(pm => (
+                                <div key={pm} style={{ background: T.surface, border: `1px solid ${T.border}`, padding: "8px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 14 }}>{pm === "Cash" ? "💵" : pm === "UPI" ? "📱" : "💳"} {pm}</span>
+                                    <input
+                                        type="number"
+                                        value={f.paymentModes[pm] || ""}
+                                        onChange={e => setF(p => ({ ...p, paymentModes: { ...p.paymentModes, [pm]: +e.target.value } }))}
+                                        placeholder="0"
+                                        style={{ width: "100%", background: T.bg, border: `1px solid ${T.border}`, color: T.t1, borderRadius: 4, padding: "4px 8px", fontFamily: FONT.mono, fontSize: 14, textAlign: "right" }}
+                                    />
+                                </div>
                             ))}
+                        </div>
+                        <div style={{ background: autoCredit > 0 ? `${T.crimson}22` : T.surface, border: `1px solid ${autoCredit > 0 ? T.crimson : T.border}`, padding: "10px 14px", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: autoCredit > 0 ? T.crimson : T.t2 }}>📋 Unpaid Balance (Udhaar)</div>
+                                <div style={{ fontSize: 11, color: T.t3 }}>Auto-calculated to credit ledger</div>
+                            </div>
+                            <div style={{ fontSize: 18, fontWeight: 900, fontFamily: FONT.mono, color: autoCredit > 0 ? T.crimson : T.t3 }}>{fmt(autoCredit)}</div>
                         </div>
                     </Field>
                 </div>
@@ -242,7 +292,9 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22, paddingTop: 18, borderTop: `1px solid ${T.border}` }}>
                 <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-                <Btn variant="amber" loading={saving} onClick={handleSave}>📤 Record Sale & Generate Bill</Btn>
+                <Btn variant={f.type === "Sale" ? "amber" : "sky"} loading={saving} onClick={handleSave}>
+                    {f.type === "Sale" ? "📤 Record Sale & Generate Bill" : "📝 Save Quotation"}
+                </Btn>
             </div>
         </Modal>
     );
