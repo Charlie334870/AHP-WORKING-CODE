@@ -3,15 +3,15 @@ import { T, FONT } from "../theme";
 import { uid, CATEGORIES, EMOJIS, fmt } from "../utils";
 import { Modal, Field, Input, Select, Divider, Btn } from "./ui";
 
-export function ProductModal({ open, onClose, product, onSave, toast }) {
+export function ProductModal({ open, onClose, product, onSave, toast, activeShopId }) {
     const isEdit = !!product;
-    const blank = { name: "", sku: "", category: "Engine", brand: "", vehicles: "", buyPrice: "", sellPrice: "", stock: "", minStock: "10", location: "", supplier: "", image: "📦", gst: "18", notes: "" };
+    const blank = { name: "", sku: "", hsnCode: "", category: "Engine", brand: "", vehicles: "", buyPrice: "", sellPrice: "", mrp: "", stock: "", minStock: "10", maxStock: "1000", reorderQty: "20", location: "", supplier: "", image: "📦", gstRate: "18", trackBatch: false, batchNumber: "", expiryDate: "", notes: "" };
     const [f, setF] = useState(blank);
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        setF(product ? { ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), minStock: String(product.minStock), gst: String(product.gst || 18) } : blank);
+        setF(product ? { ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), mrp: String(product.mrp || ""), stock: String(product.stock), minStock: String(product.minStock), maxStock: String(product.maxStock || 1000), reorderQty: String(product.reorderQty || 20), gstRate: String(product.gstRate || product.gst || 18), hsnCode: product.hsnCode || "", trackBatch: !!product.trackBatch, batchNumber: product.batchNumber || "", expiryDate: product.expiryDate || "", vehicles: product.vehicles || (product.compatibleVehicles || []).join(", ") } : blank);
         setErrors({});
     }, [product, open]);
 
@@ -34,14 +34,14 @@ export function ProductModal({ open, onClose, product, onSave, toast }) {
         if (!validate()) return;
         setSaving(true);
         await new Promise(r => setTimeout(r, 200));
-        onSave({ ...f, id: product?.id || "p" + uid(), buyPrice: +f.buyPrice, sellPrice: +f.sellPrice, stock: +f.stock, minStock: +f.minStock || 10, gst: +f.gst || 18 });
+        onSave({ ...f, id: product?.id || "p" + uid(), shopId: product?.shopId || activeShopId, buyPrice: +f.buyPrice, sellPrice: +f.sellPrice, mrp: +f.mrp || null, stock: +f.stock, minStock: +f.minStock || 10, maxStock: +f.maxStock || 1000, reorderQty: +f.reorderQty || 20, gstRate: +f.gstRate || 18, hsnCode: f.hsnCode || "", trackBatch: !!f.trackBatch, batchNumber: f.batchNumber || "", expiryDate: f.expiryDate || "" });
         toast(isEdit ? "Product updated!" : "Product added to inventory!", "success", isEdit ? undefined : "New Product");
         setSaving(false);
         onClose();
     };
 
     return (
-        <Modal open={open} onClose={onClose} title={isEdit ? "Edit Product" : "Add New Product"} subtitle={isEdit ? `SKU: ${product.sku}` : "Register a new product in your inventory"} width={640}>
+        <Modal open={open} onClose={onClose} title={isEdit ? "Edit Product" : "Add New Product"} subtitle={isEdit ? `SKU: ${product.sku}` : "Register a new product in your inventory"} width={680}>
             <div style={{ marginBottom: 16 }}>
                 <Field label="Product Icon / Image">
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
@@ -54,9 +54,11 @@ export function ProductModal({ open, onClose, product, onSave, toast }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <div style={{ gridColumn: "span 2" }}><Field label="Product Name" required error={errors.name}><Input value={f.name} onChange={set("name")} placeholder="Bosch Brake Pad Set — Front" /></Field></div>
                 <Field label="SKU / Code" required error={errors.sku}><Input value={f.sku} onChange={set("sku")} placeholder="BRK-F-0042" /></Field>
+                <Field label="HSN / SAC Code" hint="For GST filing"><Input value={f.hsnCode} onChange={set("hsnCode")} placeholder="87083000" /></Field>
                 <Field label="Category"><Select value={f.category} onChange={set("category")} options={CATEGORIES.map(c => ({ value: c, label: c }))} /></Field>
                 <Field label="Brand / Manufacturer"><Input value={f.brand} onChange={set("brand")} placeholder="Bosch, NGK…" /></Field>
                 <Field label="Supplier"><Input value={f.supplier} onChange={set("supplier")} placeholder="Supplier name" /></Field>
+                <Field label="Storage Location" hint="Rack / shelf code"><Input value={f.location} onChange={set("location")} placeholder="Rack A-12" /></Field>
                 <div style={{ gridColumn: "span 2" }}><Field label="Vehicle Compatibility"><Input value={f.vehicles} onChange={set("vehicles")} placeholder="Car — Swift, i20 / Bike — Splendor, Activa" /></Field></div>
                 <div style={{ gridColumn: "span 2" }}><Field label="Notes / Description"><Input value={f.notes} onChange={set("notes")} placeholder="Any important notes" /></Field></div>
 
@@ -64,7 +66,8 @@ export function ProductModal({ open, onClose, product, onSave, toast }) {
                 <div style={{ gridColumn: "span 2" }} />
                 <Field label="Buying Price (₹)" required error={errors.buyPrice}><Input type="number" value={f.buyPrice} onChange={set("buyPrice")} placeholder="0" prefix="₹" /></Field>
                 <Field label="Selling Price (₹)" required error={errors.sellPrice}><Input type="number" value={f.sellPrice} onChange={set("sellPrice")} placeholder="0" prefix="₹" /></Field>
-                <Field label="GST Rate"><Select value={String(f.gst)} onChange={set("gst")} options={["0", "5", "12", "18", "28"].map(v => ({ value: v, label: v + "% GST" }))} /></Field>
+                <Field label="MRP (₹)" hint="Maximum Retail Price"><Input type="number" value={f.mrp} onChange={set("mrp")} placeholder="0" prefix="₹" /></Field>
+                <Field label="GST Rate"><Select value={String(f.gstRate)} onChange={set("gstRate")} options={["0", "5", "12", "18", "28"].map(v => ({ value: v, label: v + "% GST" }))} /></Field>
 
                 {profit !== null && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -83,7 +86,22 @@ export function ProductModal({ open, onClose, product, onSave, toast }) {
                 <div style={{ gridColumn: "span 2" }} />
                 <Field label={isEdit ? "Current Stock" : "Opening Stock"} required error={errors.stock}><Input type="number" value={f.stock} onChange={set("stock")} placeholder="0" suffix="units" /></Field>
                 <Field label="Min Stock Alert" hint="Alert when stock drops below"><Input type="number" value={f.minStock} onChange={set("minStock")} placeholder="10" suffix="units" /></Field>
-                <Field label="Storage Location" hint="Rack / shelf code"><Input value={f.location} onChange={set("location")} placeholder="Rack A-12" /></Field>
+                <Field label="Max Stock" hint="Maximum capacity"><Input type="number" value={f.maxStock} onChange={set("maxStock")} placeholder="1000" suffix="units" /></Field>
+                <Field label="Reorder Qty" hint="Auto PO quantity"><Input type="number" value={f.reorderQty} onChange={set("reorderQty")} placeholder="20" suffix="units" /></Field>
+
+                {/* Batch / Expiry Tracking */}
+                <div style={{ gridColumn: "span 2", display: "flex", gap: 14, alignItems: "center", padding: "10px 14px", background: T.surface, borderRadius: 10, border: `1px solid ${T.border}` }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, color: T.t1 }}>
+                        <input type="checkbox" checked={f.trackBatch} onChange={e => set("trackBatch")(e.target.checked)} style={{ accentColor: T.amber, width: 16, height: 16 }} />
+                        📦 Track Batch / Expiry
+                    </label>
+                    {f.trackBatch && (
+                        <>
+                            <Input value={f.batchNumber} onChange={set("batchNumber")} placeholder="Batch #" style={{ flex: 1 }} />
+                            <Input type="date" value={f.expiryDate} onChange={set("expiryDate")} style={{ width: 150 }} />
+                        </>
+                    )}
+                </div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22, paddingTop: 18, borderTop: `1px solid ${T.border}` }}>
                 <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
@@ -92,3 +110,4 @@ export function ProductModal({ open, onClose, product, onSave, toast }) {
         </Modal>
     );
 }
+

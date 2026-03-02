@@ -41,11 +41,13 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
         : +f.discount || 0;
     const subtotal = sellPrice * qty;
     const totalAfterDisc = subtotal - discAmt;
-    const gstRate = sel?.gst || 18;
+    const gstRate = sel?.gstRate || sel?.gst || 18;
     const gstAmt_ = (totalAfterDisc * gstRate) / (100 + gstRate); // GST inclusive
     const profitPerUnit = sellPrice - (sel?.buyPrice || 0);
     const totalProfit = (profitPerUnit * qty) - discAmt;
-    const invoiceNo = (f.type === "Quotation" ? "EST-" : "INV-") + Math.floor(Math.random() * 9000 + 4000);
+    const invoiceRef = useRef("");
+    if (!invoiceRef.current || !open) invoiceRef.current = (f.type === "Quotation" ? "EST-" : "INV-") + Math.floor(Math.random() * 9000 + 4000);
+    const invoiceNo = invoiceRef.current;
 
     // Payment Splitting Logic
     const activePayments = Object.values(f.paymentModes).reduce((a, b) => a + b, 0);
@@ -133,8 +135,12 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
                 ))}
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                <Btn variant="ghost" full style={{ fontSize: 12 }}>🖨 Print</Btn>
-                <Btn variant="ghost" full style={{ fontSize: 12 }}>💬 WhatsApp</Btn>
+                <Btn variant="ghost" full style={{ fontSize: 12 }} onClick={() => window.print()}>🖨 Print</Btn>
+                <Btn variant="ghost" full style={{ fontSize: 12 }} onClick={() => {
+                    const msg = encodeURIComponent(`📋 ${f.type === "Quotation" ? "Quotation" : "Invoice"} ${invoiceNo}\n\nProduct: ${sel.name}\nQty: ${qty} × ${fmt(sellPrice)} = ${fmt(totalAfterDisc)}${discAmt > 0 ? `\nDiscount: -${fmt(discAmt)}` : ""}\n\nThank you for your business!\n— Ravi Auto Parts, Hyderabad`);
+                    const phone = f.customerPhone ? f.customerPhone.replace(/\D/g, "") : "";
+                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                }}>💬 WhatsApp</Btn>
                 <Btn variant="amber" full onClick={onClose}>Done</Btn>
             </div>
         </Modal>
@@ -168,7 +174,7 @@ export function SaleModal({ open, onClose, product, products, onSave, toast }) {
                     <span style={{ fontSize: 32 }}>{sel.image}</span>
                     <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, color: T.t1, fontSize: 14 }}>{sel.name}</div>
-                        <div style={{ fontSize: 12, color: T.t3, marginTop: 2, fontFamily: FONT.mono }}>{sel.sku} · {sel.vehicles}</div>
+                        <div style={{ fontSize: 12, color: T.t3, marginTop: 2, fontFamily: FONT.mono }}>{sel.sku} · {sel.vehicles || (sel.compatibleVehicles || []).join(", ") || "Universal"}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 11, color: T.t3 }}>Stock</div>

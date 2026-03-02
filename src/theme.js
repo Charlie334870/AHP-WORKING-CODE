@@ -75,4 +75,8 @@ export const GLOBAL_CSS = `
   .glow-amber { box-shadow: 0 0 20px rgba(245,158,11,0.2), 0 0 40px rgba(245,158,11,0.05); }
   .glow-emerald { box-shadow: 0 0 20px rgba(16,185,129,0.15); }
   .glow-crimson { box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+  .glow-sky { box-shadow: 0 0 20px rgba(56,189,248,0.15); }
+  .fade-in { animation: fadeIn 0.2s ease both; }
+  .btn-hover-subtle { transition: background 0.15s, color 0.15s; }
+  .btn-hover-subtle:hover { background: ${T.amberGlow} !important; color: ${T.amber} !important; }
 `;

@@ -6,7 +6,7 @@ import { useStore } from "../store";
 
 const S = {
     NEW: { bg: `${T.sky}18`, color: T.sky, label: "New Order", next: "Accept" },
-    ACCEPTED: { bg: `${T.teal}18`, color: "#2DD4BF", label: "Accepted", next: "Pack" },
+    ACCEPTED: { bg: "rgba(45,212,191,0.12)", color: "#2DD4BF", label: "Accepted", next: "Pack" },
     PACKED: { bg: `${T.amber}18`, color: T.amber, label: "Packed", next: "Dispatch" },
     DISPATCHED: { bg: `${T.violet}18`, color: T.violet, label: "Dispatched", next: "Delivered" },
     DELIVERED: { bg: `${T.emerald}18`, color: T.emerald, label: "Delivered", next: null },

@@ -1,12 +1,12 @@
 import { useState, useMemo } from "react";
 import { AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { T, FONT } from "../theme";
-import { CATEGORIES, fmt, fmtN, pct, stockStatus, STATUS, margin } from "../utils";
+import { CATEGORIES, fmt, fmtN, pct, stockStatus, STATUS, margin, getOverduePayments, generateReminderMessage, getExpiringProducts } from "../utils";
 import { StatCard, ChartTip, Badge, Btn } from "../components/ui";
 
 const PIE_C = [T.amber, T.sky, T.emerald, T.violet, "#FB923C", "#F472B6", "#34D399", "#60A5FA"];
 
-export function DashboardPage({ products, movements, orders, activeShopId, onNavigate }) {
+export function DashboardPage({ products, movements, orders, activeShopId, onNavigate, jobCards, parties, vehicles }) {
   const [period, setPeriod] = useState("30");
   const [profitView, setProfitView] = useState("unit_profit");
 
@@ -296,6 +296,180 @@ export function DashboardPage({ products, movements, orders, activeShopId, onNav
           })}
         </div>
       )}
+
+      {/* Workshop + Party Summary Row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        {/* Workshop Status */}
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>🔧 Workshop Status</div>
+            <Btn size="xs" variant="subtle" onClick={() => onNavigate("workshop")}>View All →</Btn>
+          </div>
+          {(() => {
+            const shopJobs = (jobCards || []).filter(j => j.shopId === activeShopId);
+            const active = shopJobs.filter(j => ["in_progress", "approved", "estimated"].includes(j.status));
+            const completed = shopJobs.filter(j => j.status === "completed");
+            const totalEstimated = active.reduce((s, j) => s + (j.estimatedAmount || 0), 0);
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  <div style={{ background: "rgba(129,140,248,0.1)", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: "#818CF8", fontFamily: FONT.mono }}>{active.length}</div>
+                    <div style={{ fontSize: 10, color: T.t3, fontWeight: 600 }}>Active</div>
+                  </div>
+                  <div style={{ background: T.emeraldBg, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: T.emerald, fontFamily: FONT.mono }}>{completed.length}</div>
+                    <div style={{ fontSize: 10, color: T.t3, fontWeight: 600 }}>Done</div>
+                  </div>
+                  <div style={{ background: T.amberGlow, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: T.amber, fontFamily: FONT.mono }}>{fmt(totalEstimated)}</div>
+                    <div style={{ fontSize: 10, color: T.t3, fontWeight: 600 }}>Pipeline</div>
+                  </div>
+                </div>
+                {active.length > 0 ? active.slice(0, 3).map(j => {
+                  const veh = (vehicles || []).find(v => v.id === j.vehicleId);
+                  return (
+                    <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", background: T.surface, borderRadius: 8, marginBottom: 6, fontSize: 12 }}>
+                      <span style={{ fontSize: 16 }}>{j.status === "in_progress" ? "🔧" : "📋"}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, color: T.t1 }}>{j.jobNumber}</div>
+                        <div style={{ color: T.t3, fontSize: 11 }}>{veh ? `${veh.make} ${veh.model} · ${veh.registrationNumber}` : "Vehicle"}</div>
+                      </div>
+                      <span style={{ fontFamily: FONT.mono, color: T.amber, fontWeight: 700 }}>{fmt(j.estimatedAmount || 0)}</span>
+                    </div>
+                  );
+                }) : <div style={{ color: T.t3, fontSize: 12, textAlign: "center", padding: 12 }}>No active jobs.</div>}
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Party Outstanding Summary */}
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>👥 Party Outstanding</div>
+            <Btn size="xs" variant="subtle" onClick={() => onNavigate("parties")}>View All →</Btn>
+          </div>
+          {(() => {
+            const shopParties = (parties || []).filter(p => p.shopId === activeShopId);
+            const customers = shopParties.filter(p => p.type === "customer");
+            const suppliers = shopParties.filter(p => p.type === "supplier");
+            const custWithCredit = customers.filter(c => {
+              const bal = shopMovements.filter(m => m.customerName === c.name && m.type === "SALE" && m.paymentStatus === "pending").reduce((s, m) => s + m.total, 0);
+              return bal > 0;
+            });
+            const totalReceivable = shopMovements.filter(m => m.type === "SALE" && m.paymentStatus === "pending").reduce((s, m) => s + m.total, 0);
+            const totalPayable = shopMovements.filter(m => m.type === "PURCHASE" && m.paymentStatus === "pending").reduce((s, m) => s + m.total, 0);
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  <div style={{ background: T.crimsonBg, borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 10, color: T.t3, fontWeight: 600, textTransform: "uppercase" }}>Receivable</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: T.crimson, fontFamily: FONT.mono }}>{fmt(totalReceivable)}</div>
+                    <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{custWithCredit.length} customers</div>
+                  </div>
+                  <div style={{ background: `rgba(251,146,60,0.1)`, borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 10, color: T.t3, fontWeight: 600, textTransform: "uppercase" }}>Payable</div>
+                    <div style={{ fontSize: 22, fontWeight: 900, color: "#FB923C", fontFamily: FONT.mono }}>{fmt(totalPayable)}</div>
+                    <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{suppliers.length} suppliers</div>
+                  </div>
+                </div>
+                {custWithCredit.slice(0, 4).map(c => {
+                  const bal = shopMovements.filter(m => m.customerName === c.name && m.type === "SALE" && m.paymentStatus === "pending").reduce((s, m) => s + m.total, 0);
+                  return (
+                    <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: T.surface, borderRadius: 8, marginBottom: 4, fontSize: 12 }}>
+                      <span style={{ color: T.t1, fontWeight: 600 }}>{c.name}</span>
+                      <span style={{ fontFamily: FONT.mono, fontWeight: 800, color: T.crimson }}>{fmt(bal)}</span>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 18, fontWeight: 900, fontFamily: FONT.mono, textAlign: "center", marginTop: 12, padding: "10px 0", borderTop: `1px solid ${T.border}`, color: totalReceivable > totalPayable ? T.crimson : T.emerald }}>
+                  Net: {totalReceivable > totalPayable ? "You're owed" : "You owe"} {fmt(Math.abs(totalReceivable - totalPayable))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: T.t1, marginBottom: 14 }}>⚡ Quick Actions</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+          {[
+            { icon: "🧾", label: "New Sale", page: "pos", color: T.amber },
+            { icon: "📥", label: "Purchase", page: "inventory", color: T.sky },
+            { icon: "🔧", label: "New Job Card", page: "workshop", color: "#818CF8" },
+            { icon: "👤", label: "Add Customer", page: "parties", color: T.emerald },
+            { icon: "📊", label: "Reports", page: "reports", color: T.amber },
+            { icon: "📋", label: "GST Filing", page: "reports", color: T.crimson },
+          ].map(a => (
+            <button key={a.label} onClick={() => onNavigate(a.page)} className="row-hover" style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10, padding: "14px 16px", cursor: "pointer", textAlign: "left", transition: "0.15s", display: "flex", gap: 10, alignItems: "center" }}>
+              <span style={{ fontSize: 20 }}>{a.icon}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: a.color, fontFamily: FONT.ui }}>{a.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Payment Reminders */}
+      {(() => {
+        const overdue = getOverduePayments(shopMovements, parties || []);
+        if (overdue.length === 0) return null;
+        const totalOverdue = overdue.reduce((s, c) => s + c.total, 0);
+        return (
+          <div style={{ background: T.card, border: `1px solid rgba(239,68,68,0.25)`, borderRadius: 14, padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: T.crimson }}>📢 Payment Reminders ({overdue.length})</div>
+                <div style={{ fontSize: 12, color: T.t3, marginTop: 2 }}>Total overdue: <span style={{ color: T.crimson, fontWeight: 800, fontFamily: FONT.mono }}>{fmt(totalOverdue)}</span></div>
+              </div>
+              <Btn size="xs" variant="subtle" onClick={() => onNavigate("parties")}>View All →</Btn>
+            </div>
+            {overdue.slice(0, 4).map(c => (
+              <div key={c.name} style={{ display: "flex", gap: 12, alignItems: "center", padding: "10px 12px", background: T.crimsonBg, borderRadius: 10, marginBottom: 6, border: `1px solid rgba(239,68,68,0.15)` }}>
+                <span style={{ fontSize: 18 }}>👤</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, color: T.t1, fontSize: 13 }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: T.t3 }}>{c.invoices.length} invoice{c.invoices.length > 1 ? "s" : ""} · {c.daysOverdue} days overdue</div>
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 900, fontFamily: FONT.mono, color: T.crimson }}>{fmt(c.total)}</span>
+                {c.phone && (
+                  <button onClick={() => {
+                    const msg = generateReminderMessage(c);
+                    window.open(`https://wa.me/${c.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+                  }} style={{ background: "#25D366", border: "none", borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#fff" }}>
+                    💬 Remind
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* Expiring Stock */}
+      {(() => {
+        const expiring = getExpiringProducts(shopProducts, 60);
+        if (expiring.length === 0) return null;
+        return (
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: T.amber, marginBottom: 14 }}>⏳ Expiring Stock ({expiring.length} items)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+              {expiring.slice(0, 6).map(p => (
+                <div key={p.id} style={{ background: p.isExpired ? T.crimsonBg : T.amberGlow, border: `1px solid ${p.isExpired ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.2)"}`, borderRadius: 10, padding: "12px 14px" }}>
+                  <span style={{ fontSize: 20 }}>{p.image}</span>
+                  <div style={{ fontWeight: 700, color: T.t1, fontSize: 13, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: p.isExpired ? T.crimson : T.amber, fontWeight: 800, marginTop: 4 }}>
+                    {p.isExpired ? `❌ EXPIRED ${Math.abs(p.daysLeft)}d ago` : `⏰ ${p.daysLeft} days left`}
+                  </div>
+                  <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>{p.stock} units · Batch: {p.batchNumber || "N/A"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

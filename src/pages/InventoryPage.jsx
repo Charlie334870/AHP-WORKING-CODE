@@ -1,17 +1,20 @@
 import { useState, useMemo } from "react";
 import { T, FONT } from "../theme";
-import { CATEGORIES, stockStatus, margin, fmt } from "../utils";
+import { CATEGORIES, stockStatus, margin, fmt, downloadCSV, generateCSV } from "../utils";
 import { Badge, Btn, Input, Select } from "../components/ui";
 import { PurchaseModal } from "../components/PurchaseModal";
 import { SaleModal } from "../components/SaleModal";
+import { StockAdjustmentModal } from "../components/StockAdjustmentModal";
+import { printBarcodeLabels } from "../barcode";
 
-export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit, onSale, onPurchase, toast }) {
+export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit, onSale, onPurchase, onAdjust, toast }) {
     const [search, setSearch] = useState("");
     const [cat, setCat] = useState("All");
     const [statusF, setStatusF] = useState("All");
     const [sortBy, setSortBy] = useState("name");
     const [saleP, setSaleP] = useState(null);
     const [purchP, setPurchP] = useState(null);
+    const [adjP, setAdjP] = useState(null);
 
     const shopProducts = useMemo(() => products.filter(p => p.shopId === activeShopId), [products, activeShopId]);
 
@@ -32,6 +35,35 @@ export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit
     const counts = {
         out: shopProducts.filter(p => p.stock <= 0).length,
         low: shopProducts.filter(p => p.stock > 0 && p.stock < p.minStock).length,
+    };
+
+    const handleGeneratePO = () => {
+        const lowItems = shopProducts.filter(p => p.stock < p.minStock);
+        if (lowItems.length === 0) {
+            toast?.("No items below minimum stock!", "info");
+            return;
+        }
+        // Group by supplier for real PO generation
+        const bySupplier = {};
+        lowItems.forEach(p => {
+            const supplier = p.supplier || "Unknown Supplier";
+            if (!bySupplier[supplier]) bySupplier[supplier] = [];
+            const reorderQty = Math.max(p.minStock * 2 - p.stock, p.minStock);
+            bySupplier[supplier].push({ ...p, reorderQty, estimatedCost: reorderQty * p.buyPrice });
+        });
+        // Generate CSV
+        const headers = ["Supplier", "Product", "SKU", "Category", "Current Stock", "Min Stock", "Reorder Qty", "Buy Price", "Estimated Cost"];
+        const rows = [];
+        Object.entries(bySupplier).forEach(([supplier, items]) => {
+            items.forEach(p => {
+                rows.push([supplier, p.name, p.sku, p.category, p.stock, p.minStock, p.reorderQty, p.buyPrice, p.estimatedCost]);
+            });
+        });
+        const totalCost = rows.reduce((s, r) => s + r[8], 0);
+        rows.push(["", "", "", "", "", "", "TOTAL:", "", totalCost]);
+        const dateStr = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }).replace(/\s/g, "_");
+        downloadCSV(`Draft_PO_${dateStr}.csv`, generateCSV(headers, rows));
+        toast?.(`Draft PO generated: ${lowItems.length} items across ${Object.keys(bySupplier).length} suppliers · ${fmt(totalCost)} estimated cost`, "success", "📦 PO Downloaded");
     };
 
     return (
@@ -55,18 +87,16 @@ export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit
                         <button key={v} onClick={() => setStatusF(v)} style={{ background: statusF === v ? (v === "out" ? T.crimson : v === "low" ? T.amber : v === "ok" ? T.emerald : T.sky) : "transparent", color: statusF === v ? "#000" : T.t2, border: `1px solid ${statusF === v ? (v === "out" ? T.crimson : v === "low" ? T.amber : v === "ok" ? T.emerald : T.sky) : T.border}`, borderRadius: 7, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT.ui, transition: "all 0.12s" }}>{l}</button>
                     ))}
                 </div>
-                {counts.low > 0 && (
-                    <Btn
-                        variant="sky"
-                        size="sm"
-                        onClick={() => {
-                            const lowItems = shopProducts.filter(p => p.stock < p.minStock);
-                            toast && toast(`Generated Draft PO for ${lowItems.length} items sent to Distributors.`);
-                        }}
-                    >
-                        📦 Generate Draft PO ({counts.low})
+                {(counts.low + counts.out) > 0 && (
+                    <Btn variant="sky" size="sm" onClick={handleGeneratePO}>
+                        📦 Generate Draft PO ({counts.low + counts.out})
                     </Btn>
                 )}
+                <Btn variant="subtle" size="sm" onClick={() => {
+                    if (filtered.length === 0) { toast?.("No products to print labels for!", "info"); return; }
+                    printBarcodeLabels(filtered.slice(0, 30));
+                    toast?.(`Printing barcode labels for ${Math.min(filtered.length, 30)} products`, "success", "🏷️ Labels");
+                }}>🏷️ Print Labels</Btn>
                 <Btn onClick={onAdd} size="sm">＋ Add Product</Btn>
             </div>
 
@@ -74,11 +104,6 @@ export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit
                 <div style={{ fontSize: 12, color: T.t3, fontFamily: FONT.ui }}>
                     Showing <span style={{ color: T.t1, fontWeight: 700 }}>{filtered.length}</span> of {shopProducts.length} products
                 </div>
-                {shopProducts.filter(p => p.movements && Date.now() - p.movements[p.movements.length - 1]?.date > 180 * 24 * 60 * 60 * 1000).length > 0 && (
-                    <div style={{ background: `${T.crimson}22`, border: `1px solid ${T.crimson}55`, color: T.crimson, padding: "6px 12px", borderRadius: 8, fontSize: 11, fontWeight: 800 }}>
-                        ⚠️ {shopProducts.filter(p => p.movements && Date.now() - p.movements[p.movements.length - 1]?.date > 180 * 24 * 60 * 60 * 1000).length} Dead Stock items identified. Suggest Flash Sale?
-                    </div>
-                )}
             </div>
 
             {/* Table */}
@@ -125,6 +150,7 @@ export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit
                                             <Btn size="xs" variant="subtle" onClick={() => onEdit(p)}>Edit</Btn>
                                             <Btn size="xs" variant="sky" onClick={() => setPurchP(p)}>📥 Buy</Btn>
                                             <Btn size="xs" variant="amber" onClick={() => setSaleP(p)}>📤 Sell</Btn>
+                                            <Btn size="xs" variant="ghost" onClick={() => setAdjP(p)} style={{ borderColor: T.border }}>⚖️</Btn>
                                         </div>
                                     </td>
                                 </tr>
@@ -136,6 +162,7 @@ export function InventoryPage({ products, movements, activeShopId, onAdd, onEdit
 
             <SaleModal open={!!saleP} product={saleP} products={products} onClose={() => setSaleP(null)} onSave={(data) => onSale(data)} toast={toast} />
             <PurchaseModal open={!!purchP} product={purchP} products={products} onClose={() => setPurchP(null)} onSave={(data) => onPurchase(data)} toast={toast} />
+            <StockAdjustmentModal open={!!adjP} product={adjP} products={products} onClose={() => setAdjP(null)} onSave={(data) => onAdjust(data)} toast={toast} />
         </div>
     );
 }
